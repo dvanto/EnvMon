@@ -54,13 +54,6 @@ public:
 	} data;
 	
 	Measurements(RTCx *__rtc = NULL): _rtc (__rtc?__rtc:&rtc)
-		// , _index(0)
-		// , _length(EEPROM.length())
-		// , _sens_types(NULL)
-		// , _writeConfig(false)
-		// , _endOfEPPROM(false)
-		// , _data_size( sizeof(DataHeader) )
-		// , data()
 	{
 	}
 	
