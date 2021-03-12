@@ -15,9 +15,10 @@
 #include <RTCx.h>
 #include <Rtttl.h>
 
+#ifndef FF
 //#define FF(a) 	(a)		// для отладки, переключение на строки в RAM
 #define FF(a)       F(a)
-
+#endif
 
 struct Measurements
 {  
@@ -355,5 +356,6 @@ private:
 
 
 
+// _MEASUREMENTS_H_
+#endif 
 
-#endif // _MEASUREMENTS_H_
