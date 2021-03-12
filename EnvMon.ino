@@ -1,3 +1,22 @@
+/* 
+	Логер температуры и влажности 
+		на DHT11 + термисторе 
+		
+		
+todo
+	глубоко спать
+	периодически просыапться
+	просыпаться по кнопке
+	писать в лог реже , если изменения малы
+	подключить RTC
+	подключить mSD и EEPROM
+	повесить конденсатор на питание
+	сделать внешнее питание от батарейки
+	Читать по wifi другие датчики
+
+*/
+
+
 
 /* 
 void _P_defines() {} // просто отметка в редакторе
@@ -13,8 +32,10 @@ void _P_defines() {} // просто отметка в редакторе
 //#define		DISABLE_LOGGING
 
 // digital pins (_DPINS)
-#define		DHT_DPIN	8 // номер пина, к которому подсоединен датчик DTH
-#define		BEEPER_DPIN	2
+#define		DHT_DPIN			8 // номер пина, к которому подсоединен датчик DTH
+#define		BEEPER_DPIN			2
+#define		BUTTON_UP_DPIN		4
+#define		BUTTON_DOWN_DPIN	5
 
 // analog pins (_APINS)
 #define		NTC_APIN	3 // пин термистора
@@ -27,6 +48,8 @@ void _P_defines() {} // просто отметка в редакторе
 #define		LCD_PORT		0x27
 #define		LCD_WIDTH		16
 #define		LCD_TIMEOUT		2 // s
+
+#define		BTN_DELAY		1700
 
 /* 
 void _P_includes() {} // просто отметка в редакторе
@@ -76,10 +99,20 @@ THERMISTOR		temp_sens(NTC_APIN,        // Analog pin
                       3950,           // thermistor's beta coefficient
                       10100);
 
-// DebounceEvent sw_Encoder = DebounceEvent(3 , BUTTON_PUSHBUTTON | BUTTON_DEFAULT_HIGH | BUTTON_SET_PULLUP);
+
 // SensorKit s_fire(2, 12);
 SensorKit s_light(3, 11);
 // SensorKit s_light(0, 0);
+
+
+// DebounceEvent		btn_Up		= DebounceEvent(BUTTON_UP_DPIN , BUTTON_PUSHBUTTON | BUTTON_DEFAULT_HIGH | BUTTON_SET_PULLUP);
+// DebounceEvent		btn_Down	= DebounceEvent(BUTTON_DOWN_DPIN , BUTTON_PUSHBUTTON | BUTTON_DEFAULT_HIGH | BUTTON_SET_PULLUP);
+LongPressBtn		btn_Up		= LongPressBtn(BUTTON_UP_DPIN , BUTTON_PUSHBUTTON | BUTTON_DEFAULT_HIGH | BUTTON_SET_PULLUP);
+LongPressBtn		btn_Down	= LongPressBtn(BUTTON_DOWN_DPIN , BUTTON_PUSHBUTTON | BUTTON_DEFAULT_HIGH | BUTTON_SET_PULLUP);
+volatile uint8_t	f_btn_up=0;
+volatile uint8_t	f_btn_down=0;
+// bool				btn_d_wait_longpress=false;
+// bool				btn_u_wait_longpress=false;
 
 
 LCD_misc		lcd(LCD_PORT, LCD_TIMEOUT); // экран с выключением подсветки по таймеру
@@ -91,7 +124,9 @@ Clockwise		clockwise;
 
 FSTR(snd_Barbie,	"Barbie girl:d=4,o=5,b=125:8g#,8e,8g#,8c#6,a,p,8f#,8d#,8f#,8b,g#,8f#,8e,p,8e,8c#,f#,c#,p,8f#,8e,g#,f# ");
 FSTR(snd_BootUp,	"snd_BootUp:d=10,o=6,b=180,c,e,g");
+// FSTR(snd_BootUp,	"snd_BootUp:d=10,o=6,b=180,c,e,g");
 FSTR(snd_howmuch,	"howmuch:d=4,o=6,b=50:16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,8a#.5,16c6,16c#6,16d#6,8f6,16f.6,16f#.6,16d#6,8f.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,16a#.5");
+FSTR(snd_mi,		"MissionImp:d=16,o=6,b=95:32d,32d#,32d,32d#,32d,32d#,32d,32d#,32d,32d,32d#,32e,32f,32f#,32g,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,a#,g,2d,32p,a#,g,2c#,32p,a#,g,2c,a#5,8c,2p,32p,a#5,g5,2f#,32p,a#5,g5,2f,32p,a#5,g5,2e,d#,8d"  );
 
 Alarm			a1(BEEPER_DPIN);
 Alarm			a2(BEEPER_DPIN);
@@ -106,6 +141,28 @@ volatile		uint8_t f_WDT = 0;
 void _P_ShutdownMode() {} // просто отметка в редакторе
 */
 //******************************************************************************************
+volatile uint8_t portDhistory = 0x00;     // не pool-up
+
+ISR (PCINT2_vect)
+{
+	uint8_t changedbits;
+
+	changedbits = PIND ^ portDhistory;
+	portDhistory = PIND;
+
+	if (changedbits & (1 << BUTTON_UP_DPIN))
+	{
+		SETFLAG(f_btn_up);
+	}
+
+	if (changedbits & (1 << BUTTON_DOWN_DPIN))
+	{
+		SETFLAG(f_btn_down);
+	}
+
+}
+
+
 typedef enum : char { POWEROFF = 0,
                       STANDBY,
                       ABORT = -127,
@@ -223,28 +280,18 @@ void setup()
   //	read_flash();
   //	fv_pump.pwr++;
 
-  /*
-    // разрешение прерываний INT0 и INT1
-    //  EIMSK  =  (1<<INT0)  | (1<<INT1);
 
-    // настройка срабатывания прерываний на любому изменению
-    //EICRA  =  (0<<ISC11) | (1<<ISC10) | (0<<ISC01) | (1<<ISC00);
-
-  	PORTD |= (1 << PORTD5) | (1 << PORTD6) | (1 << PORTD6);
-    PORTB |= (1 << PORTB2);
-
-    // разрешение прерываний с портов B (PCINT[7:0]) и D (PCINT[23:16]), и запрет с порта C (PCINT[14:8])
-    PCICR  |= (1 << PCIE2) | (0 << PCIE1) | (1 << PCIE0);
-
-    // маскирование всех ног, кроме PB0 и PD7 - по одной на PCINT0 и PCINT2
-    PCMSK0 |= (0 << PCINT7)  | (0 << PCINT6)  | (0 << PCINT5)  | (0 << PCINT4)  | (0 << PCINT3)  | (1 << PCINT2)  | (0 << PCINT1)  | (0 << PCINT0);
-    //PCMSK1 |=                (0 << PCINT14) | (0 << PCINT13) | (0 << PCINT12) | (0 << PCINT11) | (0 << PCINT10) | (0 << PCINT9)  | (0 << PCINT8);
-    PCMSK2 |= (1 << PCINT23) | (1 << PCINT22) | (1 << PCINT21) | (0 << PCINT20) | (0 << PCINT19) | (0 << PCINT18) | (0 << PCINT17) | (0 << PCINT16);
-  */
   
 	a1.alarm(snd_BootUp);
 	a1.armed(3, snd_howmuch);
-	a2.armed(3);
+	a2.armed(3, snd_mi);
+	
+	pciSetup(BUTTON_UP_DPIN);
+	pciSetup(BUTTON_DOWN_DPIN);
+	
+	btn_Down.setLongpressDelay(BTN_DELAY);
+	btn_Up.setLongpressDelay(BTN_DELAY);
+	
 }
 
 //***********************************************************************************************************************************************************
@@ -280,6 +327,32 @@ void update_lcd(SensorKit &s)
 void loop()
 {
   
+	switch (btn_Up.loop() )
+	{
+	case EVENT_PRESSED:
+	
+		Log.notice( FF("btn_Up.loop() == EVENT_PRESSED" CR) );
+		break;
+		
+	case EVENT_LONGPRESS:
+		Log.notice( FF("btn_Up.loop() longpress" CR));
+		break;
+	}
+
+	switch (btn_Down.loop() )
+	{
+	case EVENT_PRESSED:
+	
+		Log.notice( FF("btn_Down.loop() == EVENT_PRESSED" CR) );
+		break;
+		
+	case EVENT_LONGPRESS:
+		Log.notice( FF("btn_Down.loop() longpress" CR));
+		break;
+	}
+
+
+	
 	if (lcd.timeout().hasPassed(LCD_TIMEOUT))
 	{
 		lcd.timeout().restart();
