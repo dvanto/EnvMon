@@ -26,6 +26,7 @@ private:
 	RTCx*			_rtc;
 	
 	uint16_t		_index			= 0;
+	uint16_t		_offset			= 0;
 	uint16_t		_length			= EEPROM.length();
 	
 	uint8_t			_data_size		= sizeof(DataHeader);
@@ -54,7 +55,7 @@ public:
 		Data(): DataHeader(), datalen(0), data(NULL) {}
 	} data;
 	
-	Measurements(RTCx *__rtc = NULL): _rtc (__rtc?__rtc:&rtc)
+	Measurements(RTCx *__rtc = NULL, uint16_t offset=0): _rtc (__rtc?__rtc:&rtc), _offset(offset), _index(offset)
 	{
 	}
 	
@@ -162,7 +163,7 @@ public:
 	void flush()
 	{
 		// переключиться на начало памяти
-		_index = 0;
+		_index = _offset;
 		_endOfEPPROM = false;
 		
 		Serial.println();
@@ -183,7 +184,7 @@ public:
 			Serial.println();
 		}
 		
-		_index = 0;
+		_index = _offset;
 		_endOfEPPROM = false;
 		if (!_configSaved) writeConfig();
 	}
@@ -227,8 +228,8 @@ public:
 	
 	void resetEEPROM()
 	{
-		for( uint16_t i = 0 ; i < EEPROM.length(); EEPROM[i++] = -1);
-		_index = 0;
+		for( uint16_t i = _offset ; i < EEPROM.length(); EEPROM[i++] = -1);
+		_index = _offset;
 		_endOfEPPROM = false;
 	}
 	
