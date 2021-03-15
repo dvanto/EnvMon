@@ -152,7 +152,7 @@ FSTR(snd_alarm,		"alarm:d=8,o=6,b=180:c,b,c,b,c,b,c,b,c,b,c,b"); //,2p,c,b,2p,c,
 FSTR(snd_howmuch,	"howmuch:d=4,o=6,b=50:16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,8a#.5,16c6,16c#6,16d#6,8f6,16f.6,16f#.6,16d#6,8f.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,16a#.5");
 FSTR(snd_mi,		"MissionImp:d=16,o=6,b=95:32d,32d#,32d,32d#,32d,32d#,32d,32d#,32d,32d,32d#,32e,32f,32f#,32g,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,a#,g,2d,32p,a#,g,2c#,32p,a#,g,2c,a#5,8c,2p,32p,a#5,g5,2f#,32p,a#5,g5,2f,32p,a#5,g5,2e,d#,8d"  );
 
-FSTR(msg_cfg,		CR "config la=%d ha=%d lt=%d si=%d" CR CR);
+FSTR(msg_cfg,		CR "config	%s	la=%d ha=%d lt=%d si=%d" CR CR);
 FSTR(msg_loop,		"lcd.on() fd=%d w=%d u=%d d=%d" CR);
 FSTR(msg_input,		"input(" __TIME__ ",%d):  	up=%d %d %d %d %d	down=%d %d %d %d %d	CMD=%d	MODE=%d	ITEM=%d	TXT=%S	VAL=%	dms=%l" CR);
 
@@ -379,7 +379,7 @@ void setup()
 	// EEPROM.put(0, cfg); while(1);
 	
 	// EEPROM.get(0, cfg);
-	Log.notice( FS(msg_cfg) , cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
+	Log.notice( FS(msg_cfg), "get", cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
 		
 	a1.alarm(snd_BootUp);
 	a1.armed(1, snd_howmuch);
@@ -829,7 +829,7 @@ enum InputCommand	{
 	if (cfg_changed)
 	{
 		// EEPROM.put(0, cfg);
-		Log.notice( FS(msg_cfg),
+		Log.notice( FS(msg_cfg), "write >",
 					cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
 	}
 	
@@ -851,13 +851,8 @@ bool inputProceedCmd()
 			// case NONE:
 			case CHOOSE:
 				
-				Serial.print("CHOOSE CMD_UP  	=");
 				incItem( inputItem, ITEM_LAST-ITEM_FIRST);
 				cfg_item = ((int*)&cfg) + inputItem;
-				// Serial.print(inputItem);
-				// Serial.print( FS(ITEMTEXT) );
-				// Serial.print( *cfg_item ) ;
-				// Serial.println();
 			break;
 				
 			case CHG_SAVE_INTERVAL:
@@ -876,13 +871,8 @@ bool inputProceedCmd()
 			{
 			// case NONE:
 			case CHOOSE:
-				Serial.print("CHOOSE CMD_DOWN	=");
 				decItem( inputItem, 0);
 				cfg_item = ((int*)&cfg) + inputItem;
-				// Serial.print(inputItem);
-				// Serial.print( FS(ITEMTEXT) );
-				// Serial.print( *cfg_item ) ;
-				// Serial.println();
 				break;
 				
 			case CHG_SAVE_INTERVAL:
