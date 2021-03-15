@@ -24,8 +24,8 @@ void _P_defines() {} // просто отметка в редакторе
 //*******************************************************************************************
 
 //  ..\libraries\ArduinoLog\ArduinoLog.h
-// #define		LOG_LEVEL			LOG_LEVEL_NOTICE
-#define		LOG_LEVEL			LOG_LEVEL_TRACE
+#define		LOG_LEVEL			LOG_LEVEL_NOTICE
+// #define		LOG_LEVEL			LOG_LEVEL_TRACE
 // #define		LOG_LEVEL			LOG_LEVEL_VERBOSE
 
 // #define		DEBUG_WAKEUPS
@@ -50,7 +50,10 @@ void _P_defines() {} // просто отметка в редакторе
 #define		LCD_TIMEOUT		10 // s
 
 // задержка долгого нажатия
-#define		BTN_DELAY		1700
+#define		BTN_DELAY		400	// ms
+
+#define		INPUT_TIMEOUT	10000	// ms
+#define		INPUT_REPEAT	250		// ms
 
 // задержка интервала сна
 #define		SLEEP_DELAY		20 // s
@@ -145,9 +148,13 @@ Clockwise		clockwise;
 FSTR(snd_Barbie,	"Barbie girl:d=4,o=5,b=125:8g#,8e,8g#,8c#6,a,p,8f#,8d#,8f#,8b,g#,8f#,8e,p,8e,8c#,f#,c#,p,8f#,8e,g#,f# ");
 FSTR(snd_BootUp,	"snd_BootUp:d=10,o=6,b=180:c,e,g");
 // FSTR(snd_BootUp,	"snd_BootUp:d=10,o=6,b=180,c,e,g");
-FSTR(snd_alarm,		"alarm:d=8,o=6,b=180:c,b,c,b,c,b,c,b,c,b,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,c,b,c,b,c,b,c,b,c,b");
+FSTR(snd_alarm,		"alarm:d=8,o=6,b=180:c,b,c,b,c,b,c,b,c,b,c,b"); //,2p,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,2p,c,b,c,b,c,b,c,b,c,b,c,b");
 FSTR(snd_howmuch,	"howmuch:d=4,o=6,b=50:16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,8a#.5,16c6,16c#6,16d#6,8f6,16f.6,16f#.6,16d#6,8f.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16a#5,16d#6,16d#6,32c#6,16c.6,16d#6,32d#6,32c#6,16c6,8c#6,8a#5,16c6,16g#5,16a#.5");
 FSTR(snd_mi,		"MissionImp:d=16,o=6,b=95:32d,32d#,32d,32d#,32d,32d#,32d,32d#,32d,32d,32d#,32e,32f,32f#,32g,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,a#,g,2d,32p,a#,g,2c#,32p,a#,g,2c,a#5,8c,2p,32p,a#5,g5,2f#,32p,a#5,g5,2f,32p,a#5,g5,2e,d#,8d"  );
+
+FSTR(msg_cfg,		CR "config la=%d ha=%d lt=%d si=%d" CR CR);
+FSTR(msg_loop,		"lcd.on() fd=%d w=%d u=%d d=%d" CR);
+FSTR(msg_input,		"input(" __TIME__ ",%d):  	up=%d %d %d %d %d	down=%d %d %d %d %d	CMD=%d	MODE=%d	ITEM=%d	TXT=%S	VAL=%	dms=%l" CR);
 
 Alarm			a1(BEEPER_DPIN);
 Alarm			a2(BEEPER_DPIN);
@@ -173,7 +180,6 @@ enum InputCommand	{
 	CMD_EXIT
 }				inputCmd;
 
-Chrono			inputTimeout(Chrono::SECONDS);
 
 /* struct	Config{
 	int			lowest_alarm_temp		= 650;	// 55c
@@ -183,7 +189,7 @@ Chrono			inputTimeout(Chrono::SECONDS);
 	int			_reserve[4];
 }; */
 
-Config			cfg = { 550, 900, LCD_TIMEOUT, SLEEP_DELAY };
+Config			cfg = { 700, 1100, LCD_TIMEOUT, SLEEP_DELAY };
 int				cfg_limits[][ITEM_LAST-ITEM_FIRST+1]	= {
 					// lowest,	highest,	lcd_timeout,	save_interval
 					{	0,		500,		5,				10	},		// low limit
@@ -373,8 +379,8 @@ void setup()
 	// EEPROM.put(0, cfg); while(1);
 	
 	// EEPROM.get(0, cfg);
-	Log.notice( FF(CR "config la=%d ha=%d lt=%d si=%d" CR CR) , cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
-	
+	Log.notice( FS(msg_cfg) , cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
+		
 	a1.alarm(snd_BootUp);
 	a1.armed(1, snd_howmuch);
 	// a2.armed(3, snd_mi);
@@ -397,34 +403,7 @@ void setup()
 	if ( update_msr() )
 		write_msr();
 
-	inputTimeout.stop();
 	
-
-/*	
-	msr_timeout.restart();
-	
- 	while (1)
-	{
-		Log.notice( FF("msr_timeout r=%d p=%d" CR) , msr_timeout.isRunning(), msr_timeout.hasPassed(2));
-		
-		if (msr_timeout.hasPassed(2))
-		{
-			for(int i=0; i<10; i++)
-			{
-				Log.notice( FF("msr_timeout r=%d p=%d" CR) , msr_timeout.isRunning(), msr_timeout.hasPassed(2));
-			}
-			
-			msr_timeout.stop();
-			for(int i=0; i<10; i++)
-			{
-				Log.notice( FF("msr_timeout r=%d p=%d" CR) , msr_timeout.isRunning(), msr_timeout.hasPassed(2));
-			}
-			
-			while (1);
-
-		}
-	}
-	 */
 	Log.notice( FF("Wdog1.init(dog, %d);" CR), SLEEP_DELAY);
 	Wdog1.init(dog, cfg.save_interval*1000);
 }
@@ -435,7 +414,7 @@ void setup()
 
 void loop()
 {
-	Log.verbose( FF("lcd.on() fd=%d w=%d u=%d d=%d" CR) , f_dog, Wdog1.status(), f_btn_up, f_btn_down);
+	Log.verbose( FS(msg_loop) , f_dog, Wdog1.status(), f_btn_up, f_btn_down);
 	
   	if ( Wdog1.status() && !f_dog) // таймер собаки активен и не сработал, т.е. ...
 	{
@@ -446,7 +425,7 @@ void loop()
 		{
 			lcd.on(START);
 			lcd.timeout().restart();
-			Log.verbose( FF("lcd.on() fd=%d w=%d u=%d d=%d" CR) , f_dog, Wdog1.status(), f_btn_up, f_btn_down);
+			Log.verbose( FS(msg_loop) , f_dog, Wdog1.status(), f_btn_up, f_btn_down);
 			update_lcd();
 		}
 		else
@@ -460,12 +439,11 @@ void loop()
 	{		
 		f_dog=0;//
 		
-		Log.trace( FF("WATCHDOG >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" CR) );
+		Log.trace( FF("WATCHDOG >>>" CR) );
 		
 		// тупо вышел таймаут
 		if ( update_msr() )
 			write_msr();
-	
 		
 		Wdog1.init(dog, cfg.save_interval*1000, STOP);
 	}
@@ -481,41 +459,22 @@ void loop()
 		lcd.setBacklight(LOW);
 		lcd.timeout().stop();
 		
-		if (cfg_changed)
-		{
-			// EEPROM.put(0, cfg);
-			Log.notice( FF(CR "FAKE config saved la=%d ha=%d lt=%d si=%d >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" CR CR) , 
-						cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
-		}
 	}
 
 	if (lcd.timeout().isRunning())
 	{		
 		if (f_btn_up||f_btn_down)
 		{	
-			Log.notice( FF("f_btn_up=%d f_btn_down=%d" CR) , f_btn_up, f_btn_down);
+			Log.trace( FF("f_btn_up=%d f_btn_down=%d" CR) , f_btn_up, f_btn_down);
 			
-			lcd.timeout().restart();
 			f_btn_up = f_btn_down = 0;
+			
+			input();
+			lcd.timeout().restart();
 		}
 		
-		char e1, e2;
-		
-		if ( input(
-				e1=btn_Up.loop()	| (btn_Up.pressed()		?EVENT_YETPRESSED:EVENT_NONE), 
-				e2=btn_Down.loop()	| (btn_Down.pressed()	?EVENT_YETPRESSED:EVENT_NONE) 
-			) ) // || inputTimeout.isRunning())
-		{
-			Log.verbose( FF("update_input_lcd  e1=%d e2=%d itк=%d" CR) , e1, e2, inputTimeout.isRunning());
-			update_input_lcd();
-		}
-		else
-		{
-			Log.verbose( FF("LCD.ON UPDATE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" CR) );
-			if (update_msr()) 	
-				update_lcd();
-		}
-
+		if (update_msr()) 	
+			update_lcd();
 			
 		// if ( e1 ) update_cw('0'+e1);
 		// if ( e2 ) update_cw('5'+e2);
@@ -523,7 +482,7 @@ void loop()
 	}
 	else 
 	{
-		Log.trace( FF("Wdog1.start() and sleep" CR) );
+		// Log.trace( FF("Wdog1.start() and sleep" CR) );
 		// msr_timeout.stop();
 		Wdog1.start();
 		delay(500);
@@ -542,8 +501,9 @@ inline int abs_f( int a ) { return a>0?a:-a; }
 
 void update_lcd(char cw)// cw=0)
 {
-	lcd.clear(0);
-	lcd.setCursor(0, 0);
+	Log.verbose( FF("update_lcd cw=%c >>>" CR), cw );
+
+	lcd.clear();
 	{
 		lcd.print( "T: ");
 		lcd.print( buf2 );
@@ -558,9 +518,6 @@ void update_lcd(char cw)// cw=0)
 		lcd.print("N: ");
 		lcd.print( buf3 );
 	} 
-	
-	// update_lcd(s_fire);
-	// update_lcd(s_light);
 	
 	update_cw( cw );
 	
@@ -597,7 +554,7 @@ bool update_msr()
 		if (!msr_timeout.hasPassed(MSR_TIMEOUT, true)) 
 			return false;
 			
-		Log.trace(FF("update_msr msr_timeout.isRunning() and hasPassed=%d" CR), msr_timeout.elapsed());
+		// Log.trace(FF("update_msr msr_timeout.isRunning() and hasPassed=%d" CR), msr_timeout.elapsed());
 	}
 	else
 		msr_timeout.restart();
@@ -639,7 +596,7 @@ void write_msr()
 		msr_need_save += ( ( msr_delta += abs_f( old_msr[i] - msr[i] ) / MSR_DELTA_LIMIT) );
 	}
 	
-	Log.notice( FF("update_msr(); need to save = %d d=%d ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" CR) , msr_need_save, msr_delta);
+	Log.notice( FF("update_msr(); need to save = %d d=%d +++" CR) , msr_need_save, msr_delta);
 
 	if ( msr_need_save || (old_ts - millis())/1000 * msr_delta > MSR_TIME_LIMIT )
 	{
@@ -687,6 +644,7 @@ void check_alarm()
 
 void setInputStep( int& step, int scaler)
 {
+	// Log.notice( FF("setInputStep:	step=%d	scaler=%d" CR), step, scaler);
 	if (abs_f(scaler) <= 100)
 		step = 10;
 	else if (abs_f(scaler) <= 900)
@@ -694,135 +652,268 @@ void setInputStep( int& step, int scaler)
 	else
 		step = 900;
 }						
-				
-Chrono	input_delay(Chrono::MILLIS);	
-
-bool input(char e_up, char e_down)
+		
+bool input()
 {
-	volatile bool	need_rest_longpress = false;
-	inputCmd = CMD_NONE;
+	Chrono	inputTimeout(Chrono::MILLIS);
+	Chrono	inputRepeat(Chrono::MILLIS);
+
+	bool	need_rest_longpress_u = false;
+	bool	need_rest_longpress_d = false;
 	
-	bool	e_up_yp = (e_up & EVENT_YETPRESSED);
-	bool	e_down_yp = (e_down & EVENT_YETPRESSED);
-	e_up &= ~EVENT_YETPRESSED;
-	e_down &= ~EVENT_YETPRESSED;
+	char	e_up;
+	char	e_down;
 	
-	if ( e_up_yp && e_down_yp)
+	lcd.setBacklight(HIGH);
+	// inputCmd = CMD_SEL;
+	// inputUpdateLCD();
+	inputTimeout.restart();
+	inputMode = NONE;
+/* 	Serial.print( "NONE,              = "); Serial.println( NONE                );
+	Serial.print( "CHOOSE,            = "); Serial.println( CHOOSE              );
+	Serial.print( "CHG_LOWEST,        = "); Serial.println( CHG_LOWEST         );
+	Serial.print( "ITEM_FIRST         = "); Serial.println( ITEM_FIRST           );
+	Serial.print( "CHG_LOWEST,        = "); Serial.println( CHG_LOWEST          );
+	Serial.print( "CHG_HIGHEST,       = "); Serial.println( CHG_HIGHEST        );
+	Serial.print( "CHG_LCD_TIMEOUT,   = "); Serial.println( CHG_LCD_TIMEOUT     );
+	Serial.print( "CHG_SAVE_INTERVAL, = "); Serial.println( CHG_SAVE_INTERVAL   );
+	Serial.print( "ITEM_LAST          = "); Serial.println( ITEM_LAST            );
+	Serial.print( "CHG_SAVE_INTERVAL, = "); Serial.println( CHG_SAVE_INTERVAL   );
+ */
+ /* 
+enum InputMode	{
+	NONE,
+	CHOOSE,
+	CHG_LOWEST,
+	ITEM_FIRST = CHG_LOWEST,
+	CHG_HIGHEST,
+	CHG_LCD_TIMEOUT,
+	CHG_SAVE_INTERVAL,
+	ITEM_LAST = CHG_SAVE_INTERVAL,
+}				inputMode	= NONE;
+int				inputItem	= 0;
+
+enum InputCommand	{
+	CMD_NONE,
+	CMD_UP,
+	CMD_DOWN,
+	CMD_SEL,
+	CMD_EXIT
+}				inputCmd;
+
+#define EVENT_NONE              0
+#define EVENT_CHANGED           1
+#define EVENT_PRESSED           2
+#define EVENT_RELEASED          3
+// только для LongPressBtn
+#define EVENT_LONGPRESS			4
+#define	EVENT_YETPRESSED		8
+ */	
+	while( !inputTimeout.hasPassed(INPUT_TIMEOUT) )
 	{
-		inputCmd = CMD_EXIT;
-		need_rest_longpress = true;
-	}
-	else
-	{
-		switch ( e_up ) 
+		e_up	= btn_Up.loop();
+		e_down	= btn_Down.loop();
+		inputCmd = CMD_NONE;
+		
+		if ( btn_Up.pressed() && btn_Down.pressed() )
 		{
+			inputCmd = CMD_EXIT;
+			need_rest_longpress_u = true;
+			need_rest_longpress_d = true;
+			while( 1 )
+			{
+				btn_Up.loop(); 
+				btn_Down.loop();
+				if (!btn_Up.pressed() && !btn_Down.pressed())
+					break;
+				// Log.verbose( FF("input double		up=%d %d %d %d	down=%d %d %d %d " CR) , 
+					// (int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u,
+					// (int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d );
+		}
+		}
+		else
+		{
+			switch ( e_up ) 
+			{
 			case EVENT_LONGPRESS:	
-				if (need_rest_longpress) break; 
+				if (need_rest_longpress_u) break; 
 				if (inputMode<=CHOOSE) 
 				{
 					inputCmd = CMD_SEL;	
-					need_rest_longpress = true;
-					break;
 				}
 				else
-					if (!input_delay.hasPassed(250)) 
-						break;;
+					inputCmd = CMD_UP;
+				need_rest_longpress_u = true;
+				inputRepeat.restart();
+				break;
 
+			// case EVENT_PRESSED:	
+				// need_rest_longpress_u = true;
+				// break;
+				
 			case EVENT_RELEASED:	
-				if (need_rest_longpress) 
-					need_rest_longpress = false;
+				if (need_rest_longpress_u) 
+					need_rest_longpress_u = false;
 				else
 					inputCmd = CMD_UP;		
 				break;
-		}
-		switch ( e_down ) 
-		{
+
+			case EVENT_NONE:
+				if (need_rest_longpress_u && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
+					inputCmd = CMD_UP;	
+				break;
+			}
+			
+			if (inputCmd == CMD_NONE)
+			switch ( e_down ) 
+			{
 			case EVENT_LONGPRESS:	
-				if (need_rest_longpress) break; 
+				if (need_rest_longpress_d) break; 
 				if (inputMode<=CHOOSE) 
 				{
 					inputCmd = CMD_EXIT;	
-					need_rest_longpress = true;
-					break;
 				}
 				else
-					if (!input_delay.hasPassed(250)) 
-						break;;
-					
+					inputCmd = CMD_DOWN;
+				need_rest_longpress_d = true;
+				inputRepeat.restart();
+				break;
+			
+			// case EVENT_PRESSED:	
+				// need_rest_longpress_d = true;
+				// break;
+				
 			case EVENT_RELEASED:	
-				if (need_rest_longpress) 
-					need_rest_longpress = false;
+				if (need_rest_longpress_d) 
+					need_rest_longpress_d = false;
 				else
 					inputCmd = CMD_DOWN;	
 				break;
+
+			case EVENT_NONE:
+				if (need_rest_longpress_d && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
+				// if (need_rest_longpress_d && inputTimeout.hasPassed(INPUT_REPEAT)) 
+					inputCmd = CMD_DOWN;	
+				break;
+			}
 		}
-		if ( inputTimeout.isRunning() && inputTimeout.hasPassed(5, inputMode != CHOOSE) )
-			inputCmd = CMD_EXIT;
-	}
+			// "input(" __TIME__ ",%d):  	up=%d %d %d %d %d	down=%d %d %d %d %d	CMD=%d	MODE=%d	ITEM=%d	TXT=%S	VAL=%	dms=%l" CR
+		Log.verbose( FS(msg_input), __LINE__,
+					(int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u, (int)inputTimeout.elapsed(),
+					(int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d, (int)inputTimeout.elapsed(),
+					(int)inputCmd, (int)inputMode, (int)inputItem, ITEMTEXT, *cfg_item, millis()
+					);
+			
+		// если что-то происходит, то обновить таймер
+		// inputMode != NONE && 
+		if ( inputCmd != CMD_NONE)
+		{
+		Log.trace( FS(msg_input), __LINE__,
+					(int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u, (int)inputTimeout.elapsed(),
+					(int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d, (int)inputTimeout.elapsed(),
+					(int)inputCmd, (int)inputMode, (int)inputItem, ITEMTEXT, *cfg_item, millis()
+					);
+			inputTimeout.restart();
+		}
 		
-	if (inputCmd)
-		Log.trace( FF("input(); e1=%d e2=%d iCMD=%d iMODE=%d iITEM=%d CFG_V=%d 				itr=%d ite=%d" CR) , e_up, e_down, inputCmd, inputMode, inputItem, *cfg_item, inputTimeout.isRunning(), inputTimeout.elapsed());
+		if (inputProceedCmd())
+			break;
+			
+		if ( inputMode != NONE ) //return false;
+			inputUpdateLCD();
+		
+		// Log.verbose( FF("input() returns; iCMD=%d iMODE=%d iITEM=%d CFG_V=%d R=%t ir=%d ie=%d" CR) , inputCmd, inputMode, inputItem, *cfg_item, inputMode != NONE, inputTimeout.isRunning(), inputTimeout.elapsed());
+	}
 	
+	// покраситься назад
+	if (cfg_changed)
+	{
+		// EEPROM.put(0, cfg);
+		Log.notice( FS(msg_cfg),
+					cfg.lowest_alarm_temp, cfg.highest_alarm_temp, cfg.lcd_timeout, cfg.save_interval);
+	}
+	
+	
+	// прорисовать старое
+	update_msr(); 	
+	update_lcd();
+	
+	return false;
+}
+
+bool inputProceedCmd()
+{
 	switch( inputCmd )
 	{
 		case CMD_UP:
 			switch (inputMode)
 			{
-				// case NONE:
-				case CHOOSE:
-					decItem( inputItem, 0 );
-					cfg_item = (int*)&cfg + inputItem;
-					break;
-					
-				case CHG_SAVE_INTERVAL:
-					setInputStep(cfg_limits[3][inputItem], *cfg_item+1);	
-				case CHG_LOWEST:
-				case CHG_HIGHEST:
-				case CHG_LCD_TIMEOUT:
-					decItem( *cfg_item, cfg_limits[0][inputItem], cfg_limits[3][inputItem]);
-					cfg_changed = true;
-					break;
+			// case NONE:
+			case CHOOSE:
+				
+				Serial.print("CHOOSE CMD_UP  	=");
+				incItem( inputItem, ITEM_LAST-ITEM_FIRST);
+				cfg_item = ((int*)&cfg) + inputItem;
+				// Serial.print(inputItem);
+				// Serial.print( FS(ITEMTEXT) );
+				// Serial.print( *cfg_item ) ;
+				// Serial.println();
+			break;
+				
+			case CHG_SAVE_INTERVAL:
+				setInputStep(cfg_limits[3][inputItem], *cfg_item+1);	
+			case CHG_LOWEST:
+			case CHG_HIGHEST:
+			case CHG_LCD_TIMEOUT:
+				incItem( *cfg_item, cfg_limits[1][inputItem], cfg_limits[3][inputItem]);
+				cfg_changed = true;
+				break;
 			}	
 			break;
 			
 		case CMD_DOWN:
 			switch (inputMode)
 			{
-				// case NONE:
-				case CHOOSE:
-					incItem( inputItem, ITEM_LAST-ITEM_FIRST);
-					cfg_item = (int*)&cfg + inputItem;
-					break;
-					
-				case CHG_SAVE_INTERVAL:
-					setInputStep(cfg_limits[3][inputItem], *cfg_item);	
-				case CHG_LOWEST:
-				case CHG_HIGHEST:
-				case CHG_LCD_TIMEOUT:
-					incItem( *cfg_item, cfg_limits[1][inputItem], cfg_limits[3][inputItem]);
-					cfg_changed = true;
-					break;
+			// case NONE:
+			case CHOOSE:
+				Serial.print("CHOOSE CMD_DOWN	=");
+				decItem( inputItem, 0);
+				cfg_item = ((int*)&cfg) + inputItem;
+				// Serial.print(inputItem);
+				// Serial.print( FS(ITEMTEXT) );
+				// Serial.print( *cfg_item ) ;
+				// Serial.println();
+				break;
+				
+			case CHG_SAVE_INTERVAL:
+				setInputStep(cfg_limits[3][inputItem], *cfg_item);	
+			case CHG_LOWEST:
+			case CHG_HIGHEST:
+			case CHG_LCD_TIMEOUT:
+				decItem( *cfg_item, cfg_limits[0][inputItem], cfg_limits[3][inputItem]);
+				cfg_changed = true;
+				break;
 			}	
 			break;
 		
 		case CMD_SEL:
 			switch (inputMode)
 			{
-				case NONE:
-					inputMode = CHOOSE;
-					break;
+			case NONE:
+				inputMode = CHOOSE;
+				break;
 
-				case CHOOSE:
-					inputMode = (InputMode)(inputItem + ITEM_FIRST);
-					break;
-					
-				case CHG_LOWEST:
-				case CHG_HIGHEST:
-				case CHG_LCD_TIMEOUT:
-				case CHG_SAVE_INTERVAL:
-					inputMode = CHOOSE;
-					break;
-					
+			case CHOOSE:
+				inputMode = (InputMode)(inputItem + ITEM_FIRST);
+				break;
+				
+/* 			case CHG_LOWEST:
+			case CHG_HIGHEST:
+			case CHG_LCD_TIMEOUT:
+			case CHG_SAVE_INTERVAL:
+				inputMode = CHOOSE;
+				break;
+ */				
 			}	
 			break;
 			
@@ -830,65 +921,49 @@ bool input(char e_up, char e_down)
 		case CMD_EXIT:
 			switch (inputMode)
 			{
-				case CHOOSE:
-					inputMode = NONE;
-					break;
+			case CHOOSE:
+				inputMode = NONE;
+				inputItem = 0;
+				return true;
+				break;
 
-				case CHG_LOWEST:
-				case CHG_HIGHEST:
-				case CHG_LCD_TIMEOUT:
-				case CHG_SAVE_INTERVAL:
-					inputMode = CHOOSE;
-					break;
+			case CHG_LOWEST:
+			case CHG_HIGHEST:
+			case CHG_LCD_TIMEOUT:
+			case CHG_SAVE_INTERVAL:
+				inputMode = CHOOSE;
+				break;
 			}	
 			break;
 			
 	}	
-	
-	Log.verbose( FF("input() returns; iCMD=%d iMODE=%d iITEM=%d CFG_V=%d R=%t ir=%d ie=%d" CR) , inputCmd, inputMode, inputItem, *cfg_item, inputMode != NONE, inputTimeout.isRunning(), inputTimeout.elapsed());
-
-	if ( inputMode == NONE && !inputTimeout.isRunning() ||
-		 inputTimeout.isRunning() && inputTimeout.hasPassed(5) )
-	{
-		inputMode = NONE;
-		inputTimeout.stop();
-		Log.verbose( FF("return false; inputTimeout.stop(); line=%d" CR), __LINE__);
-		return false;
-
-	}		
-	
-	if (inputCmd)
-		Log.trace( FF("input()   returns; iCMD=%d iMODE=%d iITEM=%d CFG_V=%d r=%t 			ir=%d ie=%d" CR) , inputCmd, inputMode, inputItem, *cfg_item, inputMode != NONE, inputTimeout.isRunning(), inputTimeout.elapsed());
-
-	Log.verbose( FF("return true; inputTimeout.restart(); line=%d" CR), __LINE__);
-	// delay(1000);
-	inputTimeout.restart();
-	return true;	
+	return false;
 }
 
-Chrono	input_refesh(Chrono::MILLIS);
-Chrono	lcd_blink(Chrono::MILLIS);
-bool	blink	=	false;
 
-void update_input_lcd()
+//Chrono	input_refesh(Chrono::MILLIS);
+Chrono			lcd_blink(Chrono::MILLIS);
+bool			blink	=	false;
+volatile int	o_input = -1;
+
+void inputUpdateLCD()
 {
-	if (inputCmd == CMD_NONE && !input_refesh.hasPassed(500, true)) return;
-	// if (inputCmd == NONE)
-		// if (input_refesh.isRunning())
-			// if( !input_refesh.hasPassed(500, true)) return;
-		// else	
-			// input_refesh.restart();
-
-	lcd.clear(1);
-	lcd.setCursor(0, 0);
+	if (inputCmd == CMD_NONE)
+	{
+		if (lcd_blink.hasPassed(500, true)) 
+			blink != blink;
+		else
+			return;
+	}
 	
-	if (lcd_blink.hasPassed(1000, true)) blink != blink;
+	lcd.home();
 	
 	if (inputMode <= CHOOSE || blink)
 	{
 		lcd.print( FF("Select  :      \x7E") );
 		lcd.setCursor(7, 0);
 		lcd.print( inputItem );	
+		lcd.print( blink );	
 	}
 	else
 	{
@@ -897,13 +972,19 @@ void update_input_lcd()
 	
 	char buf[LCD_WIDTH+1];
 	lcd.setCursor(0, 1);
-	lcd.print( FPSTR(ITEMTEXT) );
+	lcd.print( FS(ITEMTEXT) );
 	lcd.setCursor(LCD_WIDTH - sprintf( buf, "%d", *cfg_item/cfg_limits[2][inputItem]) -2, 1 );
 	lcd.print( buf );
 
-	Log.notice( FF("update_input_lcd(); iCMD=%d iMODE=%d iITEM=%d is=%S ci=%d" CR) , inputCmd, inputMode, inputItem, ITEMTEXT, *cfg_item);
-	
-	update_cw( '\x7F' );
+/* 	{
+		if (*cfg_item != o_input)
+		{
+			o_input = *cfg_item;
+			Log.notice( FF("update_input_lcd(); iCMD=%d iMODE=%d iITEM=%d is=%S ci=%d" CR) , (int)inputCmd, (int)inputMode, inputItem, ITEMTEXT, *cfg_item);
+		}
+	}
+ */	
+	update_cw( '\xDB' );
 
 }
 
