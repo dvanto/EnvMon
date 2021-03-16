@@ -25,7 +25,9 @@ void _P_defines() {} // просто отметка в редакторе
 
 //  ..\libraries\ArduinoLog\ArduinoLog.h
 #define		LOG_LEVEL			LOG_LEVEL_NOTICE
-// #define		LOG_LEVEL			LOG_LEVEL_TRACE
+#ifndef	LOG_LEVEL
+#define		LOG_LEVEL			LOG_LEVEL_TRACE
+#endif
 // #define		LOG_LEVEL			LOG_LEVEL_VERBOSE
 
 // #define		DEBUG_WAKEUPS
@@ -269,7 +271,12 @@ void dog()
 	Log.verbose( FF("gav-gav-gav" CR) );
 }
 
+/* 
+void _P_fuctions() {} // просто отметка в редакторе
+*/
+
 void update_lcd(char cw=0);
+void inputWaitRelease(InputCommand btn = CMD_NONE);
 
 //******************************************************************************************
 
@@ -653,6 +660,13 @@ void setInputStep( int& step, int scaler)
 		step = 900;
 }						
 		
+
+#define DP(v)	{ }
+#ifndef DP
+#define DP(v)	{ if (++DP_cnt>42) Serial.println(v),DP_cnt=0; else Serial.print(v); }
+int DP_cnt=0;
+#endif
+#define DPI(v)	DP((int)v)
 bool input()
 {
 	Chrono	inputTimeout(Chrono::MILLIS);
@@ -663,12 +677,13 @@ bool input()
 	
 	char	e_up;
 	char	e_down;
+	InputMode	o_input = NONE;
 	
 	lcd.setBacklight(HIGH);
-	// inputCmd = CMD_SEL;
-	// inputUpdateLCD();
+
 	inputTimeout.restart();
 	inputMode = NONE;
+
 /* 	Serial.print( "NONE,              = "); Serial.println( NONE                );
 	Serial.print( "CHOOSE,            = "); Serial.println( CHOOSE              );
 	Serial.print( "CHG_LOWEST,        = "); Serial.println( CHG_LOWEST         );
@@ -709,6 +724,7 @@ enum InputCommand	{
 #define EVENT_LONGPRESS			4
 #define	EVENT_YETPRESSED		8
  */	
+ 	DP(CR "INPUT" CR);
 	while( !inputTimeout.hasPassed(INPUT_TIMEOUT) )
 	{
 		e_up	= btn_Up.loop();
@@ -717,50 +733,53 @@ enum InputCommand	{
 		
 		if ( btn_Up.pressed() && btn_Down.pressed() )
 		{
+			DP(" B");
 			inputCmd = CMD_EXIT;
-			need_rest_longpress_u = true;
-			need_rest_longpress_d = true;
-			while( 1 )
-			{
-				btn_Up.loop(); 
-				btn_Down.loop();
-				if (!btn_Up.pressed() && !btn_Down.pressed())
-					break;
+			inputWaitRelease();
+			need_rest_longpress_u = need_rest_longpress_d = false;
+			// need_rest_longpress_u = need_rest_longpress_d = true;
+	
+			DPI(btn_Up.pressed()); DPI(btn_Down.pressed());
+			DP("b");
+			DPI(inputCmd);
 				// Log.verbose( FF("input double		up=%d %d %d %d	down=%d %d %d %d " CR) , 
 					// (int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u,
 					// (int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d );
 		}
-		}
 		else
 		{
+			
 			switch ( e_up ) 
 			{
 			case EVENT_LONGPRESS:	
-				if (need_rest_longpress_u) break; 
+				DP(" UL");
+				// if (need_rest_longpress_u) break; 
 				if (inputMode<=CHOOSE) 
 				{
 					inputCmd = CMD_SEL;	
 				}
 				else
 					inputCmd = CMD_UP;
+				DPI(inputCmd);
 				need_rest_longpress_u = true;
-				inputRepeat.restart();
+				// inputRepeat.restart();
 				break;
 
-			// case EVENT_PRESSED:	
-				// need_rest_longpress_u = true;
-				// break;
-				
-			case EVENT_RELEASED:	
+			case EVENT_RELEASED:
+				DP(" UR");
 				if (need_rest_longpress_u) 
 					need_rest_longpress_u = false;
 				else
-					inputCmd = CMD_UP;		
+					inputCmd = CMD_UP;	
+				DPI(inputCmd);
 				break;
 
 			case EVENT_NONE:
-				if (need_rest_longpress_u && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
+				if (inputMode > CHOOSE && need_rest_longpress_u && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
+				{
+					DP(" UN ");
 					inputCmd = CMD_UP;	
+				}
 				break;
 			}
 			
@@ -768,36 +787,39 @@ enum InputCommand	{
 			switch ( e_down ) 
 			{
 			case EVENT_LONGPRESS:	
-				if (need_rest_longpress_d) break; 
+				// if (need_rest_longpress_d) break; 
+				DP(" DL");
 				if (inputMode<=CHOOSE) 
 				{
 					inputCmd = CMD_EXIT;	
 				}
 				else
 					inputCmd = CMD_DOWN;
+				DPI(inputCmd);
 				need_rest_longpress_d = true;
-				inputRepeat.restart();
+				// inputRepeat.restart();
 				break;
 			
-			// case EVENT_PRESSED:	
-				// need_rest_longpress_d = true;
-				// break;
-				
 			case EVENT_RELEASED:	
+				DP(" DR");
 				if (need_rest_longpress_d) 
 					need_rest_longpress_d = false;
 				else
-					inputCmd = CMD_DOWN;	
+					inputCmd = CMD_DOWN;
+				DPI(inputCmd);
 				break;
 
 			case EVENT_NONE:
-				if (need_rest_longpress_d && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
-				// if (need_rest_longpress_d && inputTimeout.hasPassed(INPUT_REPEAT)) 
+				if (inputMode > CHOOSE && need_rest_longpress_d && inputRepeat.hasPassed(INPUT_REPEAT, true)) 
+				{
+					DP(" DN ");
 					inputCmd = CMD_DOWN;	
+				}
 				break;
 			}
 		}
-			// "input(" __TIME__ ",%d):  	up=%d %d %d %d %d	down=%d %d %d %d %d	CMD=%d	MODE=%d	ITEM=%d	TXT=%S	VAL=%	dms=%l" CR
+			
+				// "input(" __TIME__ ",%d):  	up=%d %d %d %d %d	down=%d %d %d %d %d	CMD=%d	MODE=%d	ITEM=%d	TXT=%S	VAL=%	dms=%l" CR
 		Log.verbose( FS(msg_input), __LINE__,
 					(int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u, (int)inputTimeout.elapsed(),
 					(int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d, (int)inputTimeout.elapsed(),
@@ -808,7 +830,7 @@ enum InputCommand	{
 		// inputMode != NONE && 
 		if ( inputCmd != CMD_NONE)
 		{
-		Log.trace( FS(msg_input), __LINE__,
+			Log.trace( FS(msg_input), __LINE__,
 					(int)e_up, (int)btn_Up.getPressLength(), (int)btn_Up.pressed(), (int)need_rest_longpress_u, (int)inputTimeout.elapsed(),
 					(int)e_down, (int)btn_Down.getPressLength(), (int)btn_Down.pressed(), (int)need_rest_longpress_d, (int)inputTimeout.elapsed(),
 					(int)inputCmd, (int)inputMode, (int)inputItem, ITEMTEXT, *cfg_item, millis()
@@ -816,16 +838,43 @@ enum InputCommand	{
 			inputTimeout.restart();
 		}
 		
-		if (inputProceedCmd())
-			break;
 			
-		if ( inputMode != NONE ) //return false;
-			inputUpdateLCD();
+		if ( inputCmd != CMD_NONE ) //return false;
+		{
+			DPI(e_up);	DPI(e_down);
+
+			if (inputProceedCmd())
+				break;
+			DPI(inputMode);	
+
+		}
 		
+		if ( inputMode != NONE )			
+			inputUpdateLCD();	
+			
+		if (o_input != inputMode)
+		{
+			o_input = inputMode;
+			
+			if (need_rest_longpress_u)
+			{
+				need_rest_longpress_u = false;
+				inputWaitRelease(CMD_UP);
+			}
+				
+			if (need_rest_longpress_d)
+			{
+				need_rest_longpress_d = false;
+				inputWaitRelease(CMD_DOWN);
+			}
+		}
+				
 		// Log.verbose( FF("input() returns; iCMD=%d iMODE=%d iITEM=%d CFG_V=%d R=%t ir=%d ie=%d" CR) , inputCmd, inputMode, inputItem, *cfg_item, inputMode != NONE, inputTimeout.isRunning(), inputTimeout.elapsed());
 	}
 	
 	// покраситься назад
+	DP(CR "EXIT" CR);
+
 	if (cfg_changed)
 	{
 		// EEPROM.put(0, cfg);
@@ -839,6 +888,38 @@ enum InputCommand	{
 	update_lcd();
 	
 	return false;
+}
+
+void inputWaitRelease(InputCommand btn)	// = CMD_NONE)
+{
+	
+	char s=0;
+	char eu, ed;
+	
+	switch (btn)
+	{
+	case CMD_NONE:
+		while( s != 0x33 )
+		{
+			eu	= btn_Up.loop();
+			ed	= btn_Down.loop();
+			if ( eu == EVENT_RELEASED) s |= 0x03;
+			else if ( eu )	s &= 0xF0;
+			if ( ed == EVENT_RELEASED) s |= 0x30;
+			else if ( ed )	s &= 0x0F;
+		}
+		return;
+	case CMD_UP:
+		if (btn_Up.pressed())
+			while ( btn_Up.loop() != EVENT_RELEASED );
+		return;
+		
+	case CMD_DOWN:
+		if (btn_Down.pressed())
+			while ( btn_Down.loop() != EVENT_RELEASED );
+		return;
+		
+	}
 }
 
 bool inputProceedCmd()
@@ -938,26 +1019,25 @@ volatile int	o_input = -1;
 
 void inputUpdateLCD()
 {
-	if (inputCmd == CMD_NONE)
-	{
-		if (lcd_blink.hasPassed(500, true)) 
-			blink != blink;
-		else
-			return;
-	}
+	if (lcd_blink.hasPassed(500, true)) 
+		blink = !blink;
+	else if (inputCmd == CMD_NONE)
+		return;
 	
 	lcd.home();
 	
 	if (inputMode <= CHOOSE || blink)
 	{
-		lcd.print( FF("Select  :      \x7E") );
+		lcd.print( FF("Select  :      ")); //	\x7E") );
+		lcd.print( clockwise.getNext() );
 		lcd.setCursor(7, 0);
 		lcd.print( inputItem );	
-		lcd.print( blink );	
+		// lcd.print( blink );	
 	}
 	else
 	{
-		lcd.print( FF("               \x7E") );
+		lcd.print( FF("               ")); //	\x7E") );
+		lcd.print( clockwise.getNext() );
 	}
 	
 	char buf[LCD_WIDTH+1];
@@ -974,7 +1054,7 @@ void inputUpdateLCD()
 		}
 	}
  */	
-	update_cw( '\xDB' );
+	update_cw( '\x7E');	//	'\xDB' );
 
 }
 
